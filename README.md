@@ -11,6 +11,15 @@ $ idf.py flash
 $ idf.py monitor
 ```
 
+or alternatively
+
+```
+$ mkdir build && cd build
+$ cmake ..
+$ make
+$ make flash
+```
+
 Before building, some configuration may be performed by running
 
 ```
@@ -27,9 +36,7 @@ Below is short explanation of remaining files in the project folder.
 ├── CMakeLists.txt
 ├── main
 │   ├── CMakeLists.txt
-│   ├── component.mk           Component make file
 │   └── mitsusplit_main.c
-├── Makefile                   Makefile used by legacy GNU Make
 └── README.md                  This is the file you are currently reading
 ```
 
