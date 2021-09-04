@@ -1,4 +1,4 @@
-# Hello World Example
+# mitsusplit
 
 Starts a FreeRTOS task to interface with a mitubishi heat pump through its serial interface.
 
