@@ -12,6 +12,9 @@
 #include <esp_log.h>
 #include <esp_system.h>
 #include <esp_spi_flash.h>
+#include <nvs_flash.h>
+#include <esp_netif.h>
+#include <esp_event.h>
 
 #include "mitsusplit.h"
 
@@ -34,6 +37,34 @@ static void system_info()
 
     ESP_LOGI(TAG, "%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+
+    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
+}
+
+static void flash_init()
+{
+    /* Initialize NVS partition */
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        /* NVS partition was truncated
+         * and needs to be erased */
+        ESP_ERROR_CHECK(nvs_flash_erase());
+
+        /* Retry nvs_flash_init */
+        ESP_ERROR_CHECK(nvs_flash_init());
+    }
+}
+
+static void event_loop_init()
+{
+    /* Initialize the event loop */
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+}
+
+static void tcp_init()
+{
+    /* Initialize TCP/IP */
+    ESP_ERROR_CHECK(esp_netif_init());
 }
 
 static void trace_heap()
@@ -47,7 +78,15 @@ void app_main(void)
 
     trace_heap();
 
+    flash_init();
+
+    event_loop_init();
+
+    tcp_init();
+
     ensure_provisioned();
+
+    start_mqtt();
 
     /* Start main application now */
     while (1) {
