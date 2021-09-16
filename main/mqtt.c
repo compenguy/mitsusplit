@@ -160,7 +160,7 @@ void start_mqtt(mqtt_context_t *context)
     nvs_handle_t nvs_mqtt;
     ESP_ERROR_CHECK(nvs_open(NVS_NS, NVS_READWRITE, &nvs_mqtt));
     char broker[40];
-    size_t len;
+    size_t len = 0;
     esp_err_t err = nvs_get_str(nvs_mqtt, "broker", broker, &len);
     if (len >= sizeof(broker))
     {
