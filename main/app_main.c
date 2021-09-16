@@ -22,8 +22,16 @@ static const char* TAG = "mitsusplit";
 
 // TODO: Assert (static assert?) required sdkconfig options for application
 
-static void system_info()
+typedef struct app_context
 {
+    mqtt_context_t mqtt;
+    provisioning_context_t provisioning;
+} app_context_t;
+
+void app_init(app_context_t *context)
+{
+    if (context == NULL) { return; }
+
     /* Print chip information */
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
@@ -39,10 +47,7 @@ static void system_info()
             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
-}
 
-static void flash_init()
-{
     /* Initialize NVS partition */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -53,40 +58,26 @@ static void flash_init()
         /* Retry nvs_flash_init */
         ESP_ERROR_CHECK(nvs_flash_init());
     }
-}
 
-static void event_loop_init()
-{
     /* Initialize the event loop */
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-}
 
-static void tcp_init()
-{
     /* Initialize TCP/IP */
     ESP_ERROR_CHECK(esp_netif_init());
-}
 
-static void trace_heap()
-{
-    ESP_LOGV(TAG, "Minimum free heap size: %d bytes\n", esp_get_minimum_free_heap_size());
+    init_mqtt(&context->mqtt);
+    init_provisioning(&context->provisioning);
 }
 
 void app_main(void)
 {
-    system_info();
+    app_context_t app_ctx;
+    app_init(&app_ctx);
 
-    trace_heap();
+    start_provisioning(&app_ctx.provisioning);
+    wait_provisioned(&app_ctx.provisioning);
 
-    flash_init();
-
-    event_loop_init();
-
-    tcp_init();
-
-    ensure_provisioned();
-
-    start_mqtt();
+    start_mqtt(&app_ctx.mqtt);
 
     /* Start main application now */
     while (1) {

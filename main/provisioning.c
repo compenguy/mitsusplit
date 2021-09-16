@@ -25,16 +25,21 @@
 
 #include "mitsusplit.h"
 
-static const char *TAG = "mitsusplit_provisioning";
-
-/* Signal Wi-Fi events on this event-group */
-const int WIFI_CONNECTED_EVENT = BIT0;
-static EventGroupHandle_t wifi_event_group;
-
 #define PROV_QR_VERSION         "v1"
 #define PROV_TRANSPORT_SOFTAP   "softap"
 #define PROV_TRANSPORT_BLE      "ble"
 #define QRCODE_BASE_URL         "https://espressif.github.io/esp-jumpstart/qrcode.html"
+
+static const char *TAG = "mitsusplit_provisioning";
+/* Signal Wi-Fi events on this event-group */
+static const int WIFI_CONNECTED_EVENT = BIT0;
+
+/* Signal waiter to continue execution */
+static void provisioning_signal_connected(provisioning_context_t *context)
+{
+    if (context == NULL) { return; }
+    xEventGroupSetBits(context->wifi_event_group, WIFI_CONNECTED_EVENT);
+}
 
 /* Event handler for catching system events */
 static void event_handler(void* arg, esp_event_base_t event_base,
@@ -90,19 +95,11 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Connected with IP Address:" IPSTR, IP2STR(&event->ip_info.ip));
-        /* Signal main application to continue execution */
-        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_EVENT);
+        provisioning_signal_connected((provisioning_context_t*)arg);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGI(TAG, "Disconnected. Connecting to the AP again...");
         esp_wifi_connect();
     }
-}
-
-static void wifi_init_sta(void)
-{
-    /* Start Wi-Fi in station mode */
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
 }
 
 static void get_device_service_name(char *service_name, size_t max)
@@ -159,14 +156,20 @@ static void wifi_prov_print_qr(const char *name, const char *pop, const char *tr
     ESP_LOGI(TAG, "If QR code is not visible, copy paste the below URL in a browser.\n%s?data=%s", QRCODE_BASE_URL, payload);
 }
 
-void ensure_provisioned()
+void init_provisioning(provisioning_context_t *context)
 {
-    wifi_event_group = xEventGroupCreate();
+    if (context == NULL) { return; }
+    context->wifi_event_group = xEventGroupCreate();
+}
+
+void start_provisioning(provisioning_context_t *context)
+{
+    if (context == NULL) { return; }
 
     /* Register our event handler for Wi-Fi, IP and Provisioning related events */
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID, &event_handler, context));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, context));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, context));
 
     /* Initialize Wi-Fi including netif with default config */
     esp_netif_create_default_wifi_sta();
@@ -304,10 +307,15 @@ void ensure_provisioned()
          * so let's release it's resources */
         wifi_prov_mgr_deinit();
 
-        /* Start Wi-Fi station */
-        wifi_init_sta();
+        /* Start Wi-Fi in station mode */
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        ESP_ERROR_CHECK(esp_wifi_start());
     }
+}
 
-    /* Wait for Wi-Fi connection */
-    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_EVENT, false, true, portMAX_DELAY);
+/* Wait for Wi-Fi connection */
+void wait_provisioned(provisioning_context_t *context)
+{
+    if (context == NULL) { return; }
+    xEventGroupWaitBits(context->wifi_event_group, WIFI_CONNECTED_EVENT, false, true, portMAX_DELAY);
 }
