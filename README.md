@@ -1,51 +1,113 @@
 # mitsusplit
 
-Starts a FreeRTOS task to interface with a mitubishi heat pump through its serial interface.
+Rust project to automate a mitubishi heat pump through its serial interface.
 
 User configuration occurs through an http web interface or via an MQTT broker.
 
-## Build Instructions
-```
-$ idf.py build
-$ idf.py flash
-$ idf.py monitor
-```
+## Build Setup
 
-or alternatively
+This project uses an ESP32 SoC which is not, as of this writing, fully
+supported by the rust toolchain, and additionally requires compiler features
+only available in the `nightly` toolchain.
 
-```
-$ mkdir build && cd build
-$ cmake ..
-$ make
-$ make flash
-```
+### Rust Nightly
 
-Before building, some configuration may be performed by running
+With rustup and rust installed, enable the nightly toolchain with the following
+commands:
 
-```
-$ idf.py menuconfig
+```bash
+$ rustup toolchain install nightly
+$ rustup default nightly
 ```
 
-## Folder contents
+### Target Architecture Support
 
-This project is built using CMake. The project build configuration is contained in `CMakeLists.txt` files.
+Next the necessary compiler targets must be enabled.
 
-Below is short explanation of remaining files in the project folder.
+For RISC-V based ESP32 targets (ESP32-C3) there is official compiler support,
+so all that's necessary is the following:
 
-```
-├── CMakeLists.txt
-├── main
-│   ├── CMakeLists.txt
-│   └── mitsusplit_main.c
-└── README.md                  This is the file you are currently reading
+```bash
+$ rustup target add riscv32imc-unknown-none-elf
 ```
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
+For Xtensa architecture targets, a special fork of the rust compiler is
+required. Please consult the
+[Rust on ESP Book](https://esp-rs.github.io/book/dependencies/installing-rust.html).
 
-## Troubleshooting
+### Linker Support
 
-* Program upload failure
+ldproxy is a simple tool to forward linker arguments given to ldproxy to the actual linker executable.
 
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
+To install:
 
+```bash
+$ cargo install ldproxy
+```
+
+For additional information, please consult the
+[Rust on ESP Book](https://esp-rs.github.io/book/dependencies/build-tools.html).
+
+### Flash and Debugging Support
+
+#### espflash
+
+`espflash` is a serial flasher utility for ESP devices. It can be installed as
+a cargo command as follows:
+
+```bash
+$ cargo install cargo-espflash
+$ cargo espflash --example=blinky --release --monitor
+```
+
+#### espmonitor
+
+`espmonitor` is a debugging utility and can be installed and used in a similar
+manner:
+
+```bash
+$ cargo install cargo-espmonitor
+```
+
+#### probe-rs
+
+`[probe-rs](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c3/api-guides/jtag-debugging/configure-builtin-jtag.html)`
+also supports programming and debugging. If developing from linux, some additional udev rules may be required:
+
+```
+# Espressif dev kit FTDI
+ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6010", MODE="660", GROUP="plugdev", TAG+="uaccess"
+
+# Espressif USB JTAG/serial debug unit
+ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="660", GROUP="plugdev", TAG+="uaccess"
+
+# Espressif USB Bridge
+ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1002", MODE="660", GROUP="plugdev", TAG+="uaccess"
+```
+
+#### OpenOCD
+
+For RISC-V-based ESP32 targets (ESP32-C3), openocd works out of the box:
+
+```bash
+$ openocd -f board/esp32c3-builtin.cfg
+```
+
+Other architectures will likely require [Espressif's fork](https://github.com/espressif/openocd-esp32),
+and the debugging interface will need to be specified separately from the target:
+
+```bash
+$ openocd -f interface/jlink.cfg -f target/esp32.cfg
+```
+
+## Build
+
+```bash
+$ cargo build
+```
+
+## Flash
+
+```bash
+$ echo "TODO"
+```

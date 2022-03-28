@@ -1,0 +1,7 @@
+[toolchain]
+
+channel = "nightly"
+targets = [ "riscv32i-unknown-none-elf" ]
+components = [ "rustfmt" ]
+
+

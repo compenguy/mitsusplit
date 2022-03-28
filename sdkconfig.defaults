@@ -1,21 +1,26 @@
-CONFIG_IDF_CMAKE=y
-CONFIG_IDF_TARGET_ARCH_RISCV=y
-CONFIG_IDF_TARGET="esp32c3"
-CONFIG_IDF_TARGET_ESP32C3=y
-CONFIG_IDF_FIRMWARE_CHIP_ID=0x0005
-CONFIG_SDK_TOOLPREFIX="riscv32-esp-elf-"
+# Rust often needs a bit of an extra main task stack size compared to C (the default is 3K)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=7000
 
-# enable BT stack
-CONFIG_BT_ENABLED=y
-CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
-CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=n
-CONFIG_BTDM_CTRL_MODE_BTDM=n
-CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
+# Use this to set FreeRTOS kernel tick frequency to 1000 Hz (100 Hz by default).
+# This allows to use 1 ms granuality for thread sleeps (10 ms by default).
+#CONFIG_FREERTOS_HZ=1000
+
+# NAPT demo (router)
+CONFIG_LWIP_L2_TO_L3_COPY=y
+CONFIG_LWIP_IP_FORWARD=y
+CONFIG_LWIP_IPV4_NAPT=y
+
+# Workaround for https://github.com/espressif/esp-idf/issues/7631
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=n
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=n
+
+# Workaround for the experimental HTTP(S) TLS client demo
+CONFIG_ESP_TLS_INSECURE=y
+CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY=y
 
 # Bluedroid binary is larger than default size
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
-
-# MQTT options
-CONFIG_ESP_NETIF_TCPIP_ADAPTER_COMPATIBLE_LAYER=n
