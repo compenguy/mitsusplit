@@ -15,6 +15,10 @@
 #include "esp_vfs.h"
 #include "cJSON.h"
 
+#include "app_prov.h"
+
+#define DEFAULT_SCAN_LIST_SIZE CONFIG_ESP_WIFI_SCAN_LIST_SIZE
+
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
     do                                                                                 \
@@ -168,6 +172,79 @@ static esp_err_t temperature_data_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* Simple handler for connecting to an access point */
+static esp_err_t wifi_ap_connect_post_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    char *ssid = cJSON_GetObjectItem(root, "ssid")->valuestring;
+    char *psk = cJSON_GetObjectItem(root, "psk")->valuestring;
+    ESP_LOGI(REST_TAG, "Wifi AP Connect: ssid = %s, psk = %s", ssid, psk);
+    cJSON_Delete(root);
+    httpd_resp_sendstr(req, "Post control value successfully");
+    ESP_LOGE(REST_TAG, "TODO: Unhandled request to connect to ssid %s psk %s", ssid, psk);
+    return ESP_OK;
+}
+
+/* Simple handler for getting access points */
+static esp_err_t wifi_ap_get_handler(httpd_req_t *req)
+{
+    ESP_ERROR_CHECK(wifi_enable_scanning());
+
+    uint16_t number = DEFAULT_SCAN_LIST_SIZE;
+    wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
+    uint16_t ap_count = 0;
+    memset(ap_info, 0, sizeof(ap_info));
+
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    ESP_LOGI(REST_TAG, "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
+
+    httpd_resp_set_type(req, "application/json");
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "total_networks", ap_count);
+    cJSON_AddNumberToObject(root, "returned_networks", number);
+    cJSON *networks = cJSON_AddArrayToObject(root, "networks");
+    // Because we zero-out the array before starting, we can
+    // assume that 0-rssi entries are unpopulated
+    for(int i = 0; i < number && ap_info[i].rssi != 0; i++) {
+        uint8_t bssid_str[18] = {0};
+        snprintf((char *)bssid_str, sizeof(bssid_str),
+            "%02X:%02X:%02X:%02X:%02X:%02X",
+            ap_info[i].bssid[0], ap_info[i].bssid[1], ap_info[i].bssid[2],
+            ap_info[i].bssid[3], ap_info[i].bssid[4], ap_info[i].bssid[5]);
+        cJSON *ap = cJSON_CreateObject();
+        cJSON_AddStringToObject(ap, "ssid", (char *)ap_info[i].ssid);
+        cJSON_AddStringToObject(ap, "bssid", (char *)bssid_str);
+        cJSON_AddNumberToObject(ap, "rssi", ap_info[i].rssi);
+        cJSON_InsertItemInArray(networks, i, ap);
+    }
+    const char *ap_info_resp = cJSON_Print(root);
+    httpd_resp_sendstr(req, ap_info_resp);
+    free((void *)ap_info_resp);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
 esp_err_t start_rest_server(const char *base_path)
 {
     REST_CHECK(base_path, "wrong base path", err);
@@ -181,6 +258,24 @@ esp_err_t start_rest_server(const char *base_path)
 
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
+
+    /* URI handler for provisioning device to a wifi network*/
+    httpd_uri_t wifi_ap_connect_post_uri = {
+        .uri = "/api/v1/wifi/connect",
+        .method = HTTP_POST,
+        .handler = wifi_ap_connect_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &wifi_ap_connect_post_uri);
+
+    /* URI handler for fetching AP scan results */
+    httpd_uri_t wifi_ap_scan_get_uri = {
+        .uri = "/api/v1/wifi/scan",
+        .method = HTTP_GET,
+        .handler = wifi_ap_get_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &wifi_ap_scan_get_uri);
 
     /* URI handler for fetching system info */
     httpd_uri_t system_info_get_uri = {

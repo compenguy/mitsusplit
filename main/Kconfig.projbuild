@@ -1,48 +1,44 @@
-menu "Example Configuration"
+menu "Mitsusplit Configuration"
+    config ESP_WIFI_SSID_PREFIX
+        string "WiFi SSID"
+        default "MITSU_"
+        help
+            SSID (network name) to provide during initial setup.
 
-    config EXAMPLE_MDNS_HOST_NAME
+    config ESP_WIFI_PASSWORD_PREFIX
+        string "WiFi Password"
+        default "mitsu_"
+        help
+            WiFi password (WPA or WPA2) prefix for clients to connect during initial setup.
+
+    config ESP_WIFI_CHANNEL
+        int "WiFi Channel"
+        range 1 13
+        default 1
+        help
+            WiFi channel (network channel) for the setup AP to use.
+
+    config ESP_MAX_STA_CONN
+        int "Maximal STA connections"
+        default 2
+        help
+            Max number of the STA connects to AP.
+
+    config ESP_WIFI_SCAN_LIST_SIZE
+        int "How many access points to collect during scanning"
+        range 4 40
+        default 20
+        help
+            Max number of entries when scanning for wifi access points (networks).
+
+    config MDNS_HOST_NAME
         string "mDNS Host Name"
         default "mitsusplit"
         help
             Specify the domain name used in the mDNS service.
             Note that webpage also take it as a part of URL where it will send GET/POST requests to.
 
-    choice EXAMPLE_WEB_DEPLOY_MODE
-        prompt "Website deploy mode"
-        default EXAMPLE_WEB_DEPLOY_SEMIHOST
-        help
-            Select website deploy mode.
-            You can deploy website to host, and ESP32 will retrieve them in a semihost way (JTAG is needed).
-            You can deploy website to SD card or SPI flash, and ESP32 will retrieve them via SDIO/SPI interface.
-            Detailed operation steps are listed in the example README file.
-        config EXAMPLE_WEB_DEPLOY_SEMIHOST
-            bool "Deploy website to host (JTAG is needed)"
-            help
-                Deploy website to host.
-                It is recommended to choose this mode during developing.
-        config EXAMPLE_WEB_DEPLOY_SD
-            depends on IDF_TARGET_ESP32
-            bool "Deploy website to SD card"
-            help
-                Deploy website to SD card.
-                Choose this production mode if the size of website is too large (bigger than 2MB).
-        config EXAMPLE_WEB_DEPLOY_SF
-            bool "Deploy website to SPI Nor Flash"
-            help
-                Deploy website to SPI Nor Flash.
-                Choose this production mode if the size of website is small (less than 2MB).
-    endchoice
-
-    if EXAMPLE_WEB_DEPLOY_SEMIHOST
-        config EXAMPLE_HOST_PATH_TO_MOUNT
-            string "Host path to mount (e.g. absolute path to web dist directory)"
-            default "PATH-TO-WEB-DIST_DIR"
-            help
-                When using semihost in ESP32, you should specify the host path which will be mounted to VFS.
-                Note that only absolute path is acceptable.
-    endif
-
-    config EXAMPLE_WEB_MOUNT_POINT
+    config WEB_MOUNT_POINT
         string "Website mount point in VFS"
         default "/www"
         help
