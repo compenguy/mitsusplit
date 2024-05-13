@@ -13,6 +13,7 @@
   </head>
   <body>
     <script src="petite-vue.min.js"></script>
+    <script src="axios.min.js"></script>
     <noscript>
       <strong>We're sorry but mitsusplit web interface doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
     </noscript>
@@ -33,11 +34,16 @@
 
     <!-- Body -->
     <!-- content managed by petite-vue (v-scope) -->
-    <div class="pure-menu">
-      <span class="pure-menu-heading">Available Networks</span>
+    <div v-scope class="pure-menu">
+      <div v-if="scanTimer">
+        <span class="pure-menu-heading">Available Networks</span>
+      </div>
+      <div v-else :style="{ margin: '8px' }">
+        <button @click="startScan()" type="submit" class="pure-button pure-button-primary"> Search for Networks </button>
+      </div>
       <ul class="pure-menu-list">
         <div v-scope :style="{ display: 'flex' , justifyConent: 'center'}" id="app">
-          <div v-for="(network) in store.networks">
+          <div v-for="(network) in store.networksByStrength">
             <li class="pure-menu-item">
               <div v-scope="networkBtn({ssid: network.ssid, rssi: network.rssi, size: '12'})"></div>
             </li>
@@ -64,11 +70,45 @@
       // Create global data store
       const store = PetiteVue.reactive({
         networks: [{ "ssid": "gemini", "rssi": 88 }],
-        get sortedByStrength() {
+        scanTimer: null,
+        get networksByStrength() {
           return this.networks.toSorted(compareNetworkStrength);
         },
-        get sortedByName() {
+        get networksByName() {
           return this.networks.toSorted(compareNetworkName);
+        },
+        startScan() {
+          if (this.scanTimer == null) {
+            this.scanTimer = setInterval(this.refreshNetworks, 500);
+          }
+        },
+        stopScan() {
+          if (this.scanTimer != null) {
+            clearInterval(this.scanTimer);
+            this.scanTimer = null;
+          }
+        },
+        refreshNetworks() {
+          this.networks = axios.get("/api/v1/wifi/scan")
+            .then(function (response) {
+              console.log(response);
+            })
+            .catch(function (error) {
+              console.log(error);
+            });
+        },
+        connectToNetwork(ssid, password) {
+          axios.post('/api/v1/wifi/connect',
+            {
+              "ssid": ssid,
+              "psk": password,
+            })
+            .then(function (response) {
+              console.log(response);
+            })
+            .catch(function (error) {
+              console.log(error);
+            });
         },
       });
       PetiteVue.createApp(store).mount()

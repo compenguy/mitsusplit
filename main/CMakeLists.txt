@@ -9,6 +9,11 @@ if(EXISTS ${WEB_SRC_DIR}/dist)
         EXPECTED_HASH MD5=a7db3244c9a6704a3159a38c82207f66
     )
     file(DOWNLOAD
+        https://unpkg.com/axios/dist/axios.min.js
+        ${WEB_SRC_DIR}/dist/axios.min.js
+        EXPECTED_HASH MD5=3b5b3d36fde8ffe8ed76b1efbfc65410
+    )
+    file(DOWNLOAD
         https://cdn.jsdelivr.net/npm/purecss@3.0.0/build/pure-min.css
         ${WEB_SRC_DIR}/dist/pure-min.css
         EXPECTED_HASH MD5=b249b72c296243049da303cfb44e409b
