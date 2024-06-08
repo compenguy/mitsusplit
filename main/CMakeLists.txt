@@ -1,4 +1,4 @@
-idf_component_register(SRCS "app_main.c" "rest_server.c" "app_prov.c"
+idf_component_register(SRCS "app_main.c" "rest_server.c" "wifi.c"
                     INCLUDE_DIRS ".")
 
 set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front/web-provision")

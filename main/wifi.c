@@ -1,4 +1,4 @@
-/*  WiFi provisioning softAP
+/*  WiFi support code, station and softAP modes
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
 
@@ -9,6 +9,8 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_system.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -19,14 +21,14 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
-#include "app_prov.h"
+#include "wifi.h"
 
-#define ESP_WIFI_SSID_PREFIX CONFIG_ESP_WIFI_SSID_PREFIX
-#define ESP_WIFI_PASSWORD_PREFIX CONFIG_ESP_WIFI_PASSWORD_PREFIX
-#define ESP_WIFI_CHANNEL CONFIG_ESP_WIFI_CHANNEL
+#define ESP_SOFTAP_SSID_PREFIX CONFIG_ESP_SOFTAP_SSID_PREFIX
+#define ESP_SOFTAP_PASSWORD_PREFIX CONFIG_ESP_SOFTAP_PASSWORD_PREFIX
+#define ESP_SOFTAP_CHANNEL CONFIG_ESP_SOFTAP_CHANNEL
 #define ESP_MAX_STA_CONN CONFIG_ESP_MAX_STA_CONN
 #define ESP_WIFI_SOFTAP_SAE_SUPPORT CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
-static const char *TAG = "wifi softAP";
+static const char *TAG = "wifi";
 
 /* Wifi softAP SSID prefix is set via the project configuration menu.
 
@@ -54,19 +56,19 @@ static esp_err_t wifi_init_creds(void)
     if (strnlen((const char *)ap_ssid, sizeof(ap_ssid)) == 0) {
         uint8_t baseMac[6] = {0};
         ESP_RETURN_ON_ERROR(esp_read_mac(baseMac, ESP_MAC_WIFI_SOFTAP), TAG, "Failed to read softAP MAC");
-        snprintf((char *)ap_ssid, sizeof(ap_ssid), "%6s%2X%2X%2X%2X", ESP_WIFI_SSID_PREFIX, baseMac[0], baseMac[1], baseMac[2], baseMac[3]);
+        snprintf((char *)ap_ssid, sizeof(ap_ssid), "%6s%2X%2X%2X%2X", ESP_SOFTAP_SSID_PREFIX, baseMac[0], baseMac[1], baseMac[2], baseMac[3]);
     }
     ESP_LOGI(TAG, "SSID %s", ap_ssid);
     if (strnlen((const char *)ap_psk, sizeof(ap_psk)) == 0) {
         uint8_t baseMac[6] = {0};
         ESP_RETURN_ON_ERROR(esp_read_mac(baseMac, ESP_MAC_WIFI_SOFTAP), TAG, "Failed to read softAP MAC");
-        snprintf((char *)ap_psk, sizeof(ap_psk), "%6s%2X%2X%2X%2X", ESP_WIFI_PASSWORD_PREFIX, baseMac[0], baseMac[1], baseMac[2], baseMac[3]);
+        snprintf((char *)ap_psk, sizeof(ap_psk), "%6s%2X%2X%2X%2X", ESP_SOFTAP_PASSWORD_PREFIX, baseMac[0], baseMac[1], baseMac[2], baseMac[3]);
     }
     ESP_LOGI(TAG, "PSK %s", ap_psk);
     return ESP_OK;
 }
 
-esp_err_t wifi_init_softap(void)
+esp_err_t wifi_softap_init(void)
 {
     //ESP_ERROR_CHECK(esp_netif_init());
     //ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -86,7 +88,7 @@ esp_err_t wifi_init_softap(void)
         .ap = {
             .ssid = "",
             .ssid_len = 0,
-            .channel = ESP_WIFI_CHANNEL,
+            .channel = ESP_SOFTAP_CHANNEL,
             .password = "",
             .max_connection = ESP_MAX_STA_CONN,
 #ifdef ESP_WIFI_SOFTAP_SAE_SUPPORT
@@ -115,7 +117,7 @@ esp_err_t wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             ap_ssid, ap_psk, ESP_WIFI_CHANNEL);
+             ap_ssid, ap_psk, ESP_SOFTAP_CHANNEL);
     return ESP_OK;
 }
 

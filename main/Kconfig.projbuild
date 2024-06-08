@@ -1,17 +1,17 @@
 menu "Mitsusplit Configuration"
-    config ESP_WIFI_SSID_PREFIX
+    config ESP_SOFTAP_SSID_PREFIX
         string "WiFi SSID"
         default "MITSU_"
         help
             SSID (network name) to provide during initial setup.
 
-    config ESP_WIFI_PASSWORD_PREFIX
+    config ESP_SOFTAP_PASSWORD_PREFIX
         string "WiFi Password"
         default "mitsu_"
         help
             WiFi password (WPA or WPA2) prefix for clients to connect during initial setup.
 
-    config ESP_WIFI_CHANNEL
+    config ESP_SOFTAP_CHANNEL
         int "WiFi Channel"
         range 1 13
         default 1

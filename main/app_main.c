@@ -22,7 +22,7 @@
 #include "lwip/apps/netbiosns.h"
 #include "protocol_examples_common.h"
 
-#include "app_prov.h"
+#include "wifi.h"
 
 #define MDNS_INSTANCE "MiniSplit network controller"
 
@@ -85,8 +85,9 @@ void app_main(void)
     netbiosns_init();
     netbiosns_set_name(CONFIG_MDNS_HOST_NAME);
 
-    ESP_ERROR_CHECK(wifi_init_softap());
-    // TODO: Mount Provisioning Rest Interface
+    // Deprecated softAP web-based wifi provisioning
+    // Some of these bits will be repurposed for the management/configuration interface, though
+    ESP_ERROR_CHECK(wifi_softap_init());
     ESP_ERROR_CHECK(init_fs());
     ESP_ERROR_CHECK(start_rest_server(CONFIG_WEB_MOUNT_POINT));
 }

@@ -15,7 +15,7 @@
 #include "esp_vfs.h"
 #include "cJSON.h"
 
-#include "app_prov.h"
+#include "wifi.h"
 
 #define DEFAULT_SCAN_LIST_SIZE CONFIG_ESP_WIFI_SCAN_LIST_SIZE
 
