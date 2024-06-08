@@ -78,16 +78,28 @@ esp_err_t init_fs(void)
 
 void app_main(void)
 {
-    ESP_ERROR_CHECK(nvs_flash_init());
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ESP_ERROR_CHECK(nvs_flash_init());
+    } else {
+      ESP_ERROR_CHECK(ret);
+    }
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    ESP_LOGI(TAG, "starting mdns advertisement");
     initialise_mdns();
     netbiosns_init();
     netbiosns_set_name(CONFIG_MDNS_HOST_NAME);
 
+    ESP_LOGI(TAG, "starting wifi STA mode...");
+    ESP_ERROR_CHECK(wifi_sta_init());
     // Deprecated softAP web-based wifi provisioning
     // Some of these bits will be repurposed for the management/configuration interface, though
+    ESP_LOGI(TAG, "starting wifi softAP mode...");
     ESP_ERROR_CHECK(wifi_softap_init());
+    ESP_LOGI(TAG, "starting web server...");
     ESP_ERROR_CHECK(init_fs());
     ESP_ERROR_CHECK(start_rest_server(CONFIG_WEB_MOUNT_POINT));
 }
