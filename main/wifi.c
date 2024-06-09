@@ -1,6 +1,6 @@
 /*  WiFi support code, station and softAP modes
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
+   Based on example code that is in the Public Domain (or CC0 licensed, at your option.)
 
    Unless required by applicable law or agreed to in writing, this
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
@@ -22,6 +22,7 @@
 #include "lwip/sys.h"
 
 #include "wifi.h"
+#include "esp_smartconfig.h"
 
 #define ESP_STA_MAXIMUM_RETRY CONFIG_ESP_STA_MAXIMUM_RETRY
 
@@ -66,19 +67,40 @@ static EventGroupHandle_t s_wifi_event_group;
 /* The event group allows multiple bits for each event, but we only care about two events:
  * - we are connected to the AP with an IP
  * - we failed to connect after the maximum amount of retries */
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+#define WIFI_SC_DONE_BIT   BIT0
+#define WIFI_CONNECTED_BIT BIT1
+#define WIFI_FAIL_BIT      BIT2
 
+// How many times a we can attempt to connect to an AP before we report failure
 static int s_retry_num = 0;
-static int sta_connected = 0;
-static int sta_errored = 0;
 
-static void sta_event_handler(void* arg, esp_event_base_t event_base,
-                                int32_t event_id, void* event_data)
+// 
+static void smartconfig_task(void * parm)
 {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+    EventBits_t uxBits;
+    ESP_ERROR_CHECK( esp_smartconfig_set_type(SC_TYPE_ESPTOUCH) );
+    smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK( esp_smartconfig_start(&cfg) );
+    while (1) {
+        uxBits = xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_SC_DONE_BIT, true, false, portMAX_DELAY);
+        if(uxBits & WIFI_CONNECTED_BIT) {
+            ESP_LOGI(TAG, "WiFi Connected to ap");
+        }
+        if(uxBits & WIFI_SC_DONE_BIT) {
+            ESP_LOGI(TAG, "smartconfig over");
+            esp_smartconfig_stop();
+            vTaskDelete(NULL);
+        }
+    }
+}
+
+static void sta_handle_wifi_event(int32_t event_id, void* event_data)
+{
+    if (event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
+    } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         if (s_retry_num < ESP_STA_MAXIMUM_RETRY) {
             esp_wifi_connect();
             s_retry_num++;
@@ -87,7 +109,12 @@ static void sta_event_handler(void* arg, esp_event_base_t event_base,
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
         ESP_LOGI(TAG,"connect to the AP fail");
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    }
+}
+
+static void sta_handle_ip_event(int32_t event_id, void* event_data)
+{
+    if (event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
@@ -95,11 +122,38 @@ static void sta_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
+static void sta_handle_sc_event(int32_t event_id, void* event_data)
+{
+    if (event_id == SC_EVENT_SCAN_DONE) {
+        ESP_LOGI(TAG, "Scan done");
+    } else if (event_id == SC_EVENT_FOUND_CHANNEL) {
+        ESP_LOGI(TAG, "Found channel");
+    } else if (event_id == SC_EVENT_GOT_SSID_PSWD) {
+        ESP_LOGI(TAG, "Got SSID and password");
+
+        smartconfig_event_got_ssid_pswd_t *evt = (smartconfig_event_got_ssid_pswd_t *)event_data;
+        ESP_ERROR_CHECK(wifi_sta_config_wpa2((const char *)evt->ssid, (const char *)evt->password));
+        esp_wifi_connect();
+    } else if (event_id == SC_EVENT_SEND_ACK_DONE) {
+        xEventGroupSetBits(s_wifi_event_group, WIFI_SC_DONE_BIT);
+    }
+}
+
+static void sta_event_handler(void* arg, esp_event_base_t event_base,
+                                int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT) {
+        sta_handle_wifi_event(event_id, event_data);
+    } else if (event_base == IP_EVENT) {
+        sta_handle_ip_event(event_id, event_data);
+    } else if (event_base == SC_EVENT) {
+        sta_handle_sc_event(event_id, event_data);
+    }
+}
+
 esp_err_t wifi_sta_init(void)
 {
     s_wifi_event_group = xEventGroupCreate();
-    sta_connected = 0;
-    sta_errored = 1;
 
     // Handled in app_main()
     //ESP_ERROR_CHECK(esp_netif_init());
@@ -110,22 +164,31 @@ esp_err_t wifi_sta_init(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "Failed to initialize wifi for STA mode");
 
-    esp_event_handler_instance_t instance_any_id;
+    // At registration time gets populated with an object that can be used to unregister
+    esp_event_handler_instance_t instance_any_wifi;
     esp_event_handler_instance_t instance_got_ip;
+    esp_event_handler_instance_t instance_any_sc;
     ESP_RETURN_ON_ERROR(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &sta_event_handler,
                                                         NULL,
-                                                        &instance_any_id),
+                                                        &instance_any_wifi),
                     TAG,
-                    "Failed to register wifi STA mode event handler");
+                    "Failed to register wifi STA mode event handler for wifi events");
     ESP_RETURN_ON_ERROR(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
                                                         &sta_event_handler,
                                                         NULL,
                                                         &instance_got_ip),
                     TAG,
-                    "Failed to register wifi STA mode event handler");
+                    "Failed to register wifi STA mode event handler for IP events");
+    ESP_RETURN_ON_ERROR(esp_event_handler_instance_register(SC_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &sta_event_handler,
+                                                        NULL,
+                                                        &instance_any_sc),
+                    TAG,
+                    "Failed to register wifi STA mode event handler for SmartConfig events");
 
     wifi_config_t wifi_config = { 0 };
     ESP_RETURN_ON_ERROR(esp_wifi_get_config(WIFI_IF_STA, &wifi_config), TAG, "Failed to retrieve wifi configuration settings");
@@ -137,32 +200,6 @@ esp_err_t wifi_sta_init(void)
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "Failed to start wifi STA interface");
 
     ESP_LOGI(TAG, "wifi_sta_init finished.");
-
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
-    if (bits & WIFI_CONNECTED_BIT) {
-        sta_connected = 1;
-        sta_errored = 0;
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 wifi_config.sta.ssid, wifi_config.sta.password);
-    } else if (bits & WIFI_FAIL_BIT) {
-        sta_connected = 0;
-        sta_errored = 1;
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 wifi_config.sta.ssid, wifi_config.sta.password);
-    } else {
-        sta_connected = 0;
-        sta_errored = 1;
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
     return ESP_OK;
 }
 
@@ -184,19 +221,21 @@ esp_err_t wifi_sta_config_wpa2(const char *ssid, const char *psk)
     };
     strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char *)wifi_config.sta.password, psk, sizeof(wifi_config.sta.password) - 1);
+    ESP_RETURN_ON_ERROR(esp_wifi_disconnect(), TAG, "Failed to stop wifi STA interface ahead of reconfiguring");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "Failed to configure wifi STA interface");
     return ESP_OK;
 }
 
 int wifi_sta_connected(void)
 {
-  return sta_connected;
+    return xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT ? 1 : 0;
 }
 
 int wifi_sta_errored(void)
 {
-  return sta_errored;
+    return xEventGroupGetBits(s_wifi_event_group) & WIFI_FAIL_BIT ? 1 : 0;
 }
+
 /* Wifi softAP SSID prefix is set via the project configuration menu.
 
    The actual SSID will include a suffix based on the MAC address.

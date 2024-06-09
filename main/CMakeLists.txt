@@ -1,5 +1,6 @@
 idf_component_register(SRCS "app_main.c" "rest_server.c" "wifi.c"
-                    INCLUDE_DIRS ".")
+                    INCLUDE_DIRS "."
+                    PRIV_REQUIRES esp_wifi nvs_flash spiffs sdmmc esp_http_server json)
 
 set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front/web-provision")
 if(EXISTS ${WEB_SRC_DIR}/dist)
